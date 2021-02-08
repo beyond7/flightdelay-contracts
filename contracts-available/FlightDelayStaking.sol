@@ -79,6 +79,8 @@ contract FlightDelayStaking is Ownable {
     uint256 public lastUnprocessedUnstakeRequest;
 
     mapping(address => UnstakeRequest[]) private unstakeRequests;
+    address[] private unstakeQueue;
+
     mapping(address => uint256) private currentStake;
     mapping(address => uint256) private targetStake;
     mapping(address => Stake) public stakeBalances;
@@ -284,6 +286,8 @@ contract FlightDelayStaking is Ownable {
             unstakeRequests[_msgSender()].push(
                 UnstakeRequest(remainingStable, 0, false)
             );
+            unstakeQueue.push(_msgSender());
+
             targetStake[_msgSender()] = targetStake[_msgSender()].sub(
                 remainingStable
             );
@@ -322,6 +326,44 @@ contract FlightDelayStaking is Ownable {
     }
 
     /**
+     * @notice removes a request of staker
+     * @param _addr is the address of the request owner
+     */
+    function removeRequest(address _addr) internal {
+        uint256 _index = unstakeQueue.length - 1;
+
+        for (; _index >= 0; _index -= 1) {
+            if (unstakeQueue[_index] == _addr) break;
+        }
+
+        for (uint256 i = _index; i < unstakeQueue.length - 1; i += 1) {
+            unstakeQueue[i] = unstakeQueue[i + 1];
+        }
+
+        unstakeQueue.pop();
+    }
+
+    /**
+     * @notice removes all requests of staker
+     * @param _addr is the address of the request owner
+     */
+    function removeAllRequests(address _addr) internal {
+        for (uint256 j = 0; j < unstakeRequests[_addr].length; j += 1) {
+            uint256 _index = unstakeQueue.length - 1;
+
+            for (; _index >= 0; _index -= 1) {
+                if (unstakeQueue[_index] == _addr) break;
+            }
+
+            for (uint256 i = _index; i < unstakeQueue.length - 1; i += 1) {
+                unstakeQueue[i] = unstakeQueue[i + 1];
+            }
+
+            unstakeQueue.pop();
+        }
+    }
+
+    /**
      * @notice reverts the latest unstake request
      */
     function revertLastRequest() public {
@@ -339,7 +381,8 @@ contract FlightDelayStaking is Ownable {
             remainingRequest
         );
 
-        delete callerRequests[lastIdx];
+        removeRequest(_msgSender());
+        callerRequests.pop();
     }
 
     /**
@@ -351,6 +394,7 @@ contract FlightDelayStaking is Ownable {
             "No pending requests"
         );
 
+        removeAllRequests(_msgSender());
         delete unstakeRequests[_msgSender()];
 
         uint256 remainingRequest =
